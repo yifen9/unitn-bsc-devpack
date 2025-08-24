@@ -3,7 +3,7 @@ with pkgs; [
   bash
   git
   gcc
-  openjdk-minimal-jre
+  openjdk
   openjfx-modular-sdk
   polyml
 ]
