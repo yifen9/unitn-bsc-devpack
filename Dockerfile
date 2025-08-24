@@ -29,8 +29,5 @@ USER coder
 RUN mkdir -p ~/.config/code-server \
  && printf "bind-addr: 127.0.0.1:9000\nauth: none\n" > ~/.config/code-server/config.yaml
 
-ENTRYPOINT [
-    "/bin/bash",
-    "-lc",
-    "nohup code-server /workspace >/tmp/code.log 2>&1 & exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
+ENTRYPOINT ["/bin/bash","-lc","nohup code-server /workspace >/tmp/code.log 2>&1 & exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
 EXPOSE 8080
