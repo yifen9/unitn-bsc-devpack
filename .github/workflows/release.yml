@@ -10,113 +10,108 @@ permissions:
 
 env:
   IMAGE_REF: ghcr.io/${{ github.repository_owner }}/unitn-bsc-devpack:latest
-  NERDCTL_VERSION: 1.7.6
-  CONTAINERD_VERSION: 1.7.20
 
 jobs:
-  package:
-    name: Package one-click bundles
+  package-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [linux, windows]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download nix-portable
+        run: |
+          curl -L -o nix-portable \
+            https://github.com/DavHau/nix-portable/releases/download/v010/nix-portable-$(uname -s)-${{ matrix.arch }}
+          chmod +x nix-portable
+      - name: Prepare bundle
+        run: |
+          set -eux
+          B=devpack-linux-${{ matrix.arch }}
+          mkdir -p bundle/$B
+          cp nix-portable bundle/$B/
+          mkdir -p bundle/$B/workspace bundle/$B/config
+          echo "${{ env.IMAGE_REF }}" > bundle/$B/config/image.txt
+          cat > bundle/$B/run.sh <<'SH'
+          #!/usr/bin/env bash
+          set -e
+          here="$(cd "$(dirname "$0")" && pwd)"
+          export PATH="$here:$PATH"
+          mkdir -p "$here/workspace"
+          exec "$here/nix-portable" run "${IMAGE_REF:-$(cat "$here/config/image.txt")}"
+          SH
+          chmod +x bundle/$B/run.sh
+      - name: Archive
+        run: |
+          set -eux
+          cd bundle
+          tar -czf devpack-linux-${{ matrix.arch }}.tar.gz devpack-linux-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: devpack-linux-${{ matrix.arch }}
+          path: bundle/devpack-linux-${{ matrix.arch }}.tar.gz
+
+  package-desktop:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [windows, darwin]
         arch: [amd64, arm64]
         exclude:
           - os: windows
             arch: arm64
+          - os: darwin
+            arch: amd64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Prepare bundle dir
+      - name: Prepare bundle
         run: |
           set -eux
-          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
-          mkdir -p "bundle/$B/bin" "bundle/$B/config"
-          echo "${{ env.IMAGE_REF }}" > "bundle/$B/config/image.txt"
-
-      - name: Fetch nerdctl + containerd
+          B=devpack-${{ matrix.os }}-${{ matrix.arch }}
+          mkdir -p bundle/$B/workspace bundle/$B/config
+          echo "${{ env.IMAGE_REF }}" > bundle/$B/config/image.txt
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            cat > bundle/$B/run.ps1 <<'PS1'
+            $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
+            $image = Get-Content "$here\config\image.txt"
+            docker run --rm -p 8080:8080 -v "$here\workspace:/workspace" $image
+            PS1
+          else
+            cat > bundle/$B/run.sh <<'SH'
+            #!/usr/bin/env bash
+            here="$(cd "$(dirname "$0")" && pwd)"
+            image="$(cat "$here/config/image.txt")"
+            docker run --rm -p 8080:8080 -v "$here/workspace:/workspace" "$image"
+            SH
+            chmod +x bundle/$B/run.sh
+          fi
+      - name: Archive
         run: |
           set -eux
-          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
-          cd "bundle/$B/bin"
-
-          case "${{ matrix.os }}" in
-            linux)   OS=linux   ;;
-            windows) OS=windows ;;
-          esac
-          ARCH="${{ matrix.arch }}"
-
-          curl -fsSL -o nerdctl.tgz \
-            "https://github.com/containerd/nerdctl/releases/download/v${{ env.NERDCTL_VERSION }}/nerdctl-${{ env.NERDCTL_VERSION }}-${OS}-${ARCH}.tar.gz"
-          tar -xzf nerdctl.tgz
-          rm -f nerdctl.tgz
-
-          curl -fsSL -o containerd.tgz \
-            "https://github.com/containerd/containerd/releases/download/v${{ env.CONTAINERD_VERSION }}/containerd-${{ env.CONTAINERD_VERSION }}-${OS}-${ARCH}.tar.gz"
-          tar -xzf containerd.tgz --strip-components=1 -C .
-          rm -f containerd.tgz
-
-      - name: Add run scripts
-        run: |
-          set -eux
-          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
-          cd "bundle/$B"
-
-          # Linux
-          cat > run.sh <<'SH'
-          #!/usr/bin/env bash
-          set -e
-          here="$(cd "$(dirname "$0")" && pwd)"
-          export PATH="$here/bin:$PATH"
-          mkdir -p "$here/workspace"
-          nohup "$here/bin/containerd" >/dev/null 2>&1 &
-          sleep 1
-          exec nerdctl run --rm -p 8080:8080 -v "$here/workspace:/workspace" "$(cat "$here/config/image.txt")"
-          SH
-          chmod +x run.sh
-
-          # Windows
-          cat > run.ps1 <<'PS1'
-          $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
-          $env:PATH = "$here\bin;$env:PATH"
-          New-Item -ItemType Directory -Force -Path "$here\workspace" | Out-Null
-          Start-Process -FilePath "$here\bin\containerd.exe" -ArgumentList "" -WindowStyle Hidden
-          Start-Sleep -Seconds 1
-          & "$here\bin\nerdctl.exe" run --rm -p 8080:8080 -v "$here\workspace:/workspace" (Get-Content "$here/config/image.txt")
-          PS1
-
-      - name: Archive bundle
-        run: |
-          set -eux
-          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
           cd bundle
           if [ "${{ matrix.os }}" = "windows" ]; then
-            7z a "$B.zip" "$B" >/dev/null
+            7z a devpack-windows-${{ matrix.arch }}.zip devpack-windows-${{ matrix.arch }} >/dev/null
           else
-            tar -czf "$B.tar.gz" "$B"
+            tar -czf devpack-darwin-${{ matrix.arch }}.tar.gz devpack-darwin-${{ matrix.arch }}
           fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: oneclick-${{ matrix.os }}-${{ matrix.arch }}
-          path: bundle/*
+          name: devpack-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            bundle/*.tar.gz
+            bundle/*.zip
 
   publish:
-    name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: package
+    needs: [package-linux, package-desktop]
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
-      - name: Checksums
-        run: |
+      - run: |
           cd dist
           find . -type f -name "*.tar.gz" -o -name "*.zip" | sort | xargs sha256sum > SHA256SUMS.txt
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/**/*.{tar.gz,zip}
