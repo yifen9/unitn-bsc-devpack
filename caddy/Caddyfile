@@ -10,12 +10,4 @@
   handle_path /ide* {
     reverse_proxy 127.0.0.1:9000
   }
-
-  handle_path /files* {
-    reverse_proxy http://drive.unitn.clarelab.moe {
-      header_down -X-Frame-Options
-      header_down -Content-Security-Policy
-      header_down Location /files{uri}
-    }
-  }
 }
