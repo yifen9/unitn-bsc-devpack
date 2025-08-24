@@ -71,11 +71,9 @@ jobs:
           mkdir -p bundle/$B/workspace bundle/$B/config
           echo "${{ env.IMAGE_REF }}" > bundle/$B/config/image.txt
           if [ "${{ matrix.os }}" = "windows" ]; then
-            cat > bundle/$B/run.ps1 <<'PS1'
-            $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
-            $image = Get-Content "$here\config\image.txt"
-            docker run --rm -p 8080:8080 -v "$here\workspace:/workspace" $image
-            PS1
+            echo '$here = Split-Path -Parent $MyInvocation.MyCommand.Definition' >> bundle/$B/run.ps1
+            echo '$image = Get-Content "$here\config\image.txt"' >> bundle/$B/run.ps1
+            echo 'docker run --rm -p 8080:8080 -v "$here\workspace:/workspace" $image' >> bundle/$B/run.ps1
           else
             cat > bundle/$B/run.sh <<'SH'
             #!/usr/bin/env bash
