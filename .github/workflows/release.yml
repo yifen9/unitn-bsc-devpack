@@ -1,0 +1,181 @@
+name: release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  IMAGE_REF: ghcr.io/${{ github.repository_owner }}/unitn-bsc-devpack:latest
+  NERDCTL_VERSION: 1.7.6
+  CONTAINERD_VERSION: 1.7.20
+
+jobs:
+  build-launcher:
+    name: Build launcher (Go)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Build
+        working-directory: launcher
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
+          go build -ldflags="-s -w" -o ../dist/launcher-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} .
+
+      - name: Upload launcher artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/launcher-${{ matrix.goos }}-${{ matrix.goarch }}*
+
+  package:
+    name: Package one-click bundles
+    runs-on: ubuntu-latest
+    needs: build-launcher
+    strategy:
+      matrix:
+        os: [linux, windows, macos]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download launcher
+        uses: actions/download-artifact@v4
+        with:
+          name: launcher-${{ matrix.os == 'macos' && 'darwin' || matrix.os }}-${{ matrix.arch }}
+          path: dist
+
+      - name: Prepare bundle dir
+        run: |
+          set -eux
+          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
+          mkdir -p "bundle/$B/bin" "bundle/$B/config"
+          cp dist/launcher-* "bundle/$B/bin/launcher"
+          chmod +x "bundle/$B/bin/launcher" || true
+          if [ -d nav ]; then mkdir -p "bundle/$B/nav" && cp -r nav/* "bundle/$B/nav/"; fi
+          if [ -d caddy ]; then mkdir -p "bundle/$B/caddy" && cp -r caddy/* "bundle/$B/caddy/"; fi
+          if [ -f compose.yaml ]; then cp compose.yaml "bundle/$B/compose.yaml"; fi
+          echo "${{ env.IMAGE_REF }}" > "bundle/$B/config/image.txt"
+
+      - name: Fetch nerdctl + containerd
+        run: |
+          set -eux
+          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
+          cd "bundle/$B/bin"
+
+          case "${{ matrix.os }}" in
+            linux)
+              OS=linux
+              ;;
+            macos)
+              OS=darwin
+              ;;
+            windows)
+              OS=windows
+              ;;
+          esac
+
+          ARCH="${{ matrix.arch }}"
+          curl -fsSL -o nerdctl.tgz \
+            "https://github.com/containerd/nerdctl/releases/download/v${{ env.NERDCTL_VERSION }}/nerdctl-${{ env.NERDCTL_VERSION }}-${OS}-${ARCH}.tar.gz"
+          tar -xzf nerdctl.tgz
+          rm -f nerdctl.tgz
+
+          curl -fsSL -o containerd.tgz \
+            "https://github.com/containerd/containerd/releases/download/v${{ env.CONTAINERD_VERSION }}/containerd-${{ env.CONTAINERD_VERSION }}-${OS}-${ARCH}.tar.gz" || \
+          curl -fsSL -o containerd.tgz \
+            "https://github.com/containerd/containerd/releases/download/v${{ env.CONTAINERD_VERSION }}/containerd-${{ env.CONTAINERD_VERSION }}-$( [ "$OS" = darwin ] && echo darwin || echo ${OS} )-${ARCH}.tar.gz"
+          tar -xzf containerd.tgz --strip-components=1 -C .
+          rm -f containerd.tgz
+
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            mv launcher launcher.exe || true
+          fi
+
+      - name: Add convenience scripts
+        run: |
+          set -eux
+          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
+          cd "bundle/$B"
+          # Linux/macOS
+          cat > run.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          here="$(cd "$(dirname "$0")" && pwd)"
+          export PATH="$here/bin:$PATH"
+          mkdir -p "$here/workspace"
+          if ! pgrep -x containerd >/dev/null 2>&1; then
+            nohup "$here/bin/containerd" >/tmp/containerd.log 2>&1 &
+            sleep 1
+          fi
+          "$here/bin/launcher" --image "$(cat "$here/config/image.txt")" --workspace "$here/workspace" --port 8080
+          SH
+          chmod +x run.sh
+
+          # Windows
+          cat > run.ps1 <<'PS1'
+          $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
+          $env:PATH = "$here\bin;$env:PATH"
+          New-Item -ItemType Directory -Force -Path "$here\workspace" | Out-Null
+          Start-Process -FilePath "$here\bin\containerd.exe" -ArgumentList "" -WindowStyle Hidden
+          Start-Sleep -Seconds 1
+          & "$here\bin\launcher.exe" --image (Get-Content "$here\config\image.txt") --workspace "$here\workspace" --port 8080
+          PS1
+
+      - name: Archive bundle
+        run: |
+          set -eux
+          B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
+          cd bundle
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            7z a "$B.zip" "$B" >/dev/null
+          else
+            tar -czf "$B.tar.gz" "$B"
+          fi
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneclick-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            bundle/oneclick-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            bundle/oneclick-${{ matrix.os }}-${{ matrix.arch }}.zip
+
+  publish:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Checksums
+        run: |
+          cd dist
+          find . -type f -name "*.tar.gz" -o -name "*.zip" | sort | xargs sha256sum > SHA256SUMS.txt
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.{tar.gz,zip}
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
