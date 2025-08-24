@@ -71,16 +71,18 @@ jobs:
           mkdir -p bundle/$B/workspace bundle/$B/config
           echo "${{ env.IMAGE_REF }}" > bundle/$B/config/image.txt
           if [ "${{ matrix.os }}" = "windows" ]; then
-            echo '$here = Split-Path -Parent $MyInvocation.MyCommand.Definition' >> bundle/$B/run.ps1
-            echo '$image = Get-Content "$here\config\image.txt"' >> bundle/$B/run.ps1
-            echo 'docker run --rm -p 8080:8080 -v "$here\workspace:/workspace" $image' >> bundle/$B/run.ps1
+            {
+              echo '$here = Split-Path -Parent $MyInvocation.MyCommand.Definition'
+              echo '$image = Get-Content "$here\config\image.txt"'
+              echo 'docker run --rm -p 8080:8080 -v "$here\workspace:/workspace" $image'
+            } > bundle/$B/run.ps1
           else
-            cat > bundle/$B/run.sh <<'SH'
-            #!/usr/bin/env bash
-            here="$(cd "$(dirname "$0")" && pwd)"
-            image="$(cat "$here/config/image.txt")"
-            docker run --rm -p 8080:8080 -v "$here/workspace:/workspace" "$image"
-            SH
+            {
+              echo '#!/usr/bin/env bash'
+              echo 'here="$(cd "$(dirname "$0")" && pwd)"'
+              echo 'image="$(cat "$here/config/image.txt")"'
+              echo 'docker run --rm -p 8080:8080 -v "$here/workspace:/workspace" "$image"'
+            } > bundle/$B/run.sh
             chmod +x bundle/$B/run.sh
           fi
       - name: Archive
