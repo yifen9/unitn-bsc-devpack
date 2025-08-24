@@ -31,6 +31,13 @@ jobs:
         with:
           go-version: "1.22.x"
 
+      - name: Debug tree
+        run: |
+          pwd
+          ls -la
+          ls -la launcher || true
+          cat launcher/go.mod || true
+
       - name: Build
         working-directory: launcher
         run: |
