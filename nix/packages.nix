@@ -1,12 +1,12 @@
 { pkgs }:
 with pkgs; [
+  bash
   git
   gcc
-  gnumake
+  /*gnumake
   cmake
   yarn
   ripgrep
   fd
-  bash
-  zsh
+  zsh*/
 ]
