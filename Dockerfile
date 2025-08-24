@@ -2,13 +2,13 @@ FROM ghcr.io/coder/code-server:4.91.1
 
 USER root
 RUN apt-get update \
- && apt-get install -y caddy \
+ && apt-get install -y caddy curl ca-certificates xz-utils bash \
  && rm -rf /var/lib/apt/lists/*
 
 USER coder
 WORKDIR /home/coder
 
-RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
+RUN curl -fsSL https://nixos.org/nix/install | sh -s -- --no-daemon --yes
 SHELL ["/bin/bash", "-lc"]
 RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
  && mkdir -p ~/.config/nix \
