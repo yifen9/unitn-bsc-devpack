@@ -12,8 +12,9 @@
   }
 
   handle_path /files* {
-    reverse_proxy https://drive.unitn.clarelab.moe
-    header_down -X-Frame-Options
-    header_down Content-Security-Policy "frame-ancestors 'self';"
+    reverse_proxy https://drive.unitn.clarelab.moe {
+      header_down -X-Frame-Options
+      header_down -Content-Security-Policy
+    }
   }
 }
