@@ -3,10 +3,7 @@ with pkgs; [
   bash
   git
   gcc
-  /*gnumake
-  cmake
-  yarn
-  ripgrep
-  fd
-  zsh*/
+  openjdk-minimal-jre
+  openjfx-modular-sdk
+  polyml
 ]
