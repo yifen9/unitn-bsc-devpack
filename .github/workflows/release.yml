@@ -21,13 +21,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download nix-portable
         run: |
+          set -euo pipefail
           case "${{ matrix.arch }}" in
-            amd64) NIXFILE=nix-portable-x86_64-linux ;;
-            arm64) NIXFILE=nix-portable-aarch64-linux ;;
+            amd64) NP_ARCH=x86_64 ;;
+            arm64) NP_ARCH=aarch64 ;;
           esac
-          curl -L -o nix-portable \
-            https://github.com/DavHau/nix-portable/releases/download/v010/$NIXFILE
+          URL="https://github.com/DavHau/nix-portable/releases/latest/download/nix-portable-${NP_ARCH}"
+          curl -fL --retry 3 -o nix-portable "$URL"
+          test -s nix-portable
           chmod +x nix-portable
+          file nix-portable | grep -q 'ELF' || { echo "bad nix-portable download"; exit 1; }
       - name: Prepare bundle
         run: |
           set -eux
@@ -43,8 +46,6 @@ jobs:
           export PATH="$here:$PATH"
           mkdir -p "$here/workspace"
           exec "$here/nix-portable" nix run nixpkgs#code-server -- --bind-addr 0.0.0.0:8080 --auth=none "$here/workspace"
-          SH
-          chmod +x bundle/$B/run.sh
       - name: Archive
         run: |
           set -eux
