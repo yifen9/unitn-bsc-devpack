@@ -1,45 +1,19 @@
-FROM nixos/nix:latest
+FROM ghcr.io/coder/code-server:latest
 
-RUN nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs \
+USER coder
+WORKDIR /home/coder
+RUN sh <(curl -L https://nixos.org/nix/install) --no-daemon --no-channel-add
+SHELL ["/bin/bash", "-lc"]
+RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
+ && nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs \
  && nix-channel --update \
- && nix-env -iA nixpkgs.code-server \
-                nixpkgs.caddy \
-                nixpkgs.git \
-                nixpkgs.gcc \
-                nixpkgs.gnumake \
-                nixpkgs.cmake \
-                nixpkgs.python312 \
-                nixpkgs.nodejs_20 \
-                nixpkgs.yarn \
-                nixpkgs.zsh \
-                nixpkgs.bash
+ && mkdir -p ~/.config/nix && printf "experimental-features = nix-command flakes\n" > ~/.config/nix/nix.conf
 
-ARG USERNAME=dev
-ARG UID=1000
-ARG GID=1000
+COPY --chown=coder:coder nix /home/coder/nix
+RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
+ && nix profile install /home/coder/nix#devpack
 
-RUN groupadd -g ${GID} ${USERNAME} \
- && useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME}
-
-USER ${USERNAME}
-WORKDIR /home/${USERNAME}
-
-ENV WORKSPACE=/workspace \
-    CODE_SERVER_DATA=/home/${USERNAME}/.local/share/code-server \
-    CODE_SERVER_CONFIG=/home/${USERNAME}/.config/code-server
-
-RUN mkdir -p ${WORKSPACE} ${CODE_SERVER_DATA} ${CODE_SERVER_CONFIG}
-
-USER root
-COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY caddy/Caddyfile /etc/caddy/Caddyfile
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-RUN printf "bind-addr: 127.0.0.1:9000\nauth: none\n" > ${CODE_SERVER_CONFIG}/config.yaml
-
+ENV WORKSPACE=/workspace
+RUN mkdir -p "$WORKSPACE"
+ENTRYPOINT ["bash","-lc","code-server --bind-addr 0.0.0.0:8080 --auth=none /workspace"]
 EXPOSE 8080
-
-ENV FILEBROWSER_URL="https://drive.unitn.clarelab.moe" \
-    IDE_DEFAULT_DIR="${WORKSPACE}"
-
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
