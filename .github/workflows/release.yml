@@ -56,7 +56,7 @@ jobs:
     needs: build-launcher
     strategy:
       matrix:
-        os: [linux, windows, macos]
+        os: [linux, windows]
         arch: [amd64, arm64]
         exclude:
           - os: windows
@@ -87,10 +87,6 @@ jobs:
           set -eux
           B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
           cd "bundle/$B/bin"
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            echo "skip nerdctl/containerd on macOS (upstream no darwin build)"
-            exit 0
-          fi
 
           case "${{ matrix.os }}" in
             linux)   OS=linux   ;;
@@ -130,47 +126,30 @@ jobs:
           set -eux
           B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
           cd "bundle/$B"
-          if [ "${{ matrix.os }}" = "macos" ]; then
-            cat > run-macos.sh <<'SH'
-            #!/usr/bin/env bash
-            set -euo pipefail
-            here="$(cd "$(dirname "$0")" && pwd)"
-            if command -v docker >/dev/null 2>&1; then
-              docker run --rm -p 8080:8080 -v "$here/workspace:/workspace" "$(cat "$here/config/image.txt")"
-            else
-              echo "no Docker. Please install Docker Desktop or Colima"
-              exit 1
-            fi
-            SH
-            chmod +x run-macos.sh
-          else
-            set -eux
-            B=oneclick-${{ matrix.os }}-${{ matrix.arch }}
-            cd "bundle/$B"
-            cat > run.sh <<'SH'
-            #!/usr/bin/env bash
-            set -euo pipefail
-            here="$(cd "$(dirname "$0")" && pwd)"
-            export PATH="$here/bin:$PATH"
-            mkdir -p "$here/workspace"
-            if ! pgrep -x containerd >/dev/null 2>&1; then
-              nohup "$here/bin/containerd" >/tmp/containerd.log 2>&1 &
-              sleep 1
-            fi
-            "$here/bin/launcher" --image "$(cat "$here/config/image.txt")" --workspace "$here/workspace" --port 8080
-            SH
-            chmod +x run.sh
-
-            # Windows
-            cat > run.ps1 <<'PS1'
-            $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
-            $env:PATH = "$here\bin;$env:PATH"
-            New-Item -ItemType Directory -Force -Path "$here\workspace" | Out-Null
-            Start-Process -FilePath "$here\bin\containerd.exe" -ArgumentList "" -WindowStyle Hidden
-            Start-Sleep -Seconds 1
-            & "$here\bin\launcher.exe" --image (Get-Content "$here\config\image.txt") --workspace "$here\workspace" --port 8080
-            PS1
+          # Linux/macOS
+          cat > run.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          here="$(cd "$(dirname "$0")" && pwd)"
+          export PATH="$here/bin:$PATH"
+          mkdir -p "$here/workspace"
+          if ! pgrep -x containerd >/dev/null 2>&1; then
+            nohup "$here/bin/containerd" >/tmp/containerd.log 2>&1 &
+            sleep 1
           fi
+          "$here/bin/launcher" --image "$(cat "$here/config/image.txt")" --workspace "$here/workspace" --port 8080
+          SH
+          chmod +x run.sh
+
+          # Windows
+          cat > run.ps1 <<'PS1'
+          $here = Split-Path -Parent $MyInvocation.MyCommand.Definition
+          $env:PATH = "$here\bin;$env:PATH"
+          New-Item -ItemType Directory -Force -Path "$here\workspace" | Out-Null
+          Start-Process -FilePath "$here\bin\containerd.exe" -ArgumentList "" -WindowStyle Hidden
+          Start-Sleep -Seconds 1
+          & "$here\bin\launcher.exe" --image (Get-Content "$here\config\image.txt") --workspace "$here\workspace" --port 8080
+          PS1
 
       - name: Archive bundle
         run: |
