@@ -1,20 +1,26 @@
 FROM nixos/nix:latest
 
-RUN nix-env -iA nixpkgs.code-server \
-                 nixpkgs.caddy \
-                 nixpkgs.git \
-                 nixpkgs.gcc \
-                 nixpkgs.gnumake \
-                 nixpkgs.cmake \
-                 nixpkgs.python312 \
-                 nixpkgs.nodejs_20 \
-                 nixpkgs.yarn \
-                 nixpkgs.zsh \
-                 nixpkgs.bash
+RUN nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs \
+ && nix-channel --update \
+ && nix-env -iA nixpkgs.code-server \
+                nixpkgs.caddy \
+                nixpkgs.git \
+                nixpkgs.gcc \
+                nixpkgs.gnumake \
+                nixpkgs.cmake \
+                nixpkgs.python312 \
+                nixpkgs.nodejs_20 \
+                nixpkgs.yarn \
+                nixpkgs.zsh \
+                nixpkgs.bash
 
 ARG USERNAME=dev
 ARG UID=1000
-RUN adduser -D -u ${UID} ${USERNAME}
+ARG GID=1000
+
+RUN groupadd -g ${GID} ${USERNAME} \
+ && useradd -m -u ${UID} -g ${GID} -s /bin/bash ${USERNAME}
+
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
@@ -25,10 +31,9 @@ ENV WORKSPACE=/workspace \
 RUN mkdir -p ${WORKSPACE} ${CODE_SERVER_DATA} ${CODE_SERVER_CONFIG}
 
 USER root
-COPY --chown=${USERNAME}:${USERNAME} scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY --chown=${USERNAME}:${USERNAME} caddy/Caddyfile /etc/caddy/Caddyfile
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY caddy/Caddyfile /etc/caddy/Caddyfile
 RUN chmod +x /usr/local/bin/entrypoint.sh
-USER ${USERNAME}
 
 RUN printf "bind-addr: 127.0.0.1:9000\nauth: none\n" > ${CODE_SERVER_CONFIG}/config.yaml
 
