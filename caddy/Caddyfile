@@ -2,10 +2,18 @@
   auto_https off
   admin off
 }
+
 :8080 {
   root * /home/coder/nav
   file_server
-  handle_path /ide*   { reverse_proxy 127.0.0.1:9000 }
-  handle_path /files* { reverse_proxy https://drive.unitn.clarelab.moe }
+
+  handle_path /ide* {
+    reverse_proxy 127.0.0.1:9000
+  }
+
+  handle_path /files* {
+    reverse_proxy https://drive.unitn.clarelab.moe
+  }
+
   respond /healthz 200
 }
