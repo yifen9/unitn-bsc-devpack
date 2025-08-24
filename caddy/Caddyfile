@@ -1,24 +1,11 @@
 {
-	auto_https off
-	admin off
+  auto_https off
+  admin off
 }
-
 :8080 {
-	root * {env.NAV_DIR}
-	file_server
-
-	handle_path /ide* {
-		reverse_proxy 127.0.0.1:9000
-	}
-
-	handle_path /files* {
-		reverse_proxy {env.FILEBROWSER_URL} {
-			header_up Host {http.reverse_proxy.upstream.hostport}
-			header_up X-Forwarded-Host {host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Forwarded-For {remote}
-		}
-	}
-
-	respond /healthz 200
+  root * /home/coder/nav
+  file_server
+  handle_path /ide*   { reverse_proxy 127.0.0.1:9000 }
+  handle_path /files* { reverse_proxy https://drive.unitn.clarelab.moe }
+  respond /healthz 200
 }

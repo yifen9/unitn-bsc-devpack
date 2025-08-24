@@ -2,11 +2,12 @@ FROM ghcr.io/coder/code-server:4.91.1
 
 USER root
 RUN apt-get update \
- && apt-get install -y curl ca-certificates xz-utils bash \
+ && apt-get install -y caddy
  && rm -rf /var/lib/apt/lists/*
 
 USER coder
 WORKDIR /home/coder
+
 RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
 SHELL ["/bin/bash", "-lc"]
 RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
@@ -24,6 +25,12 @@ RUN mkdir -p /home/coder/.config/code-server \
  && printf "bind-addr: 0.0.0.0:8080\nauth: none\n" > /home/coder/.config/code-server/config.yaml \
  && chown -R coder:coder /home/coder/.config
 
+COPY --chown=coder:coder nav /home/coder/nav
+COPY --chown=coder:coder caddy/Caddyfile /etc/caddy/Caddyfile
+
+RUN mkdir -p ~/.config/code-server \
+ && printf "bind-addr: 127.0.0.1:9000\nauth: none\n" > ~/.config/code-server/config.yaml
+
 USER coder
-ENTRYPOINT ["code-server","/workspace"]
+ENTRYPOINT ["/bin/bash","-lc","nohup code-server /workspace >/tmp/code.log 2>&1 & exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
 EXPOSE 8080

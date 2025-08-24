@@ -1,0 +1,8 @@
+version: "3.8"
+
+services:
+  unitn-bsc-devpack:
+    image: ghcr.io/yifen9/unitn-bsc-devpack:latest
+    restart: unless-stopped
+    ports:   [ "8080:8080" ]
+    volumes: [ ./workspace:/workspace ]
