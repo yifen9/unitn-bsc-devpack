@@ -1,4 +1,4 @@
-FROM ghcr.io/coder/code-server:latest
+FROM ghcr.io/coder/code-server:4.91.1
 
 USER root
 RUN apt-get update \
@@ -7,7 +7,6 @@ RUN apt-get update \
 
 USER coder
 WORKDIR /home/coder
-
 RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
 SHELL ["/bin/bash", "-lc"]
 RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
@@ -15,15 +14,16 @@ RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
  && echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
 
 COPY --chown=coder:coder nix /home/coder/nix
-
 RUN . "$HOME/.nix-profile/etc/profile.d/nix.sh" \
  && nix profile install /home/coder/nix#devpack
 
+USER root
 ENV WORKSPACE=/workspace
-RUN mkdir -p $WORKSPACE
+RUN mkdir -p "$WORKSPACE" && chown coder:coder "$WORKSPACE"
+RUN mkdir -p /home/coder/.config/code-server \
+ && printf "bind-addr: 0.0.0.0:8080\nauth: none\n" > /home/coder/.config/code-server/config.yaml \
+ && chown -R coder:coder /home/coder/.config
 
-RUN mkdir -p ~/.config/code-server \
- && printf "bind-addr: 0.0.0.0:8080\nauth: none\n" > ~/.config/code-server/config.yaml
-
+USER coder
+ENTRYPOINT ["code-server","/workspace"]
 EXPOSE 8080
-ENTRYPOINT ["code-server", "/workspace"]
