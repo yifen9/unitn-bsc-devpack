@@ -1,23 +1,46 @@
 <!doctype html><meta charset="utf-8">
-<title>UNITN DevPack</title>
+<title>UBDP Online</title>
 <style>
 html,body{height:100%;margin:0}
 body{display:flex;flex-direction:column;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
 .header,.footer{padding:10px 14px;border-bottom:1px solid #e5e7eb}
 .footer{border-top:1px solid #e5e7eb;border-bottom:none;font-size:12px;color:#666}
 .main{flex:1;min-height:0}
-.nav a{margin-right:12px;text-decoration:none;color:#111}
+.nav a{margin-right:12px;text-decoration:none;color:#111;padding:6px 8px;border-radius:8px}
+.nav a.active{background:#f3f4f6}
 iframe{border:0;width:100%;height:100%}
 </style>
 <header class="header">
   <div class="nav">
-    <a href="/ide/">Code</a>
-    <a href="/files/" target="_self">Files</a>
+    <a href="#ide" id="tab-ide">Code</a>
+    <a href="#files" id="tab-files">Files</a>
   </div>
 </header>
 <main class="main">
-  <iframe src="/ide/"></iframe>
+  <iframe id="pane" src="" referrerpolicy="no-referrer"></iframe>
 </main>
 <footer class="footer">
-  Contact: yifeng.li@studenti.unitn.it
+  Contact: yourmail@unitn.it
 </footer>
+<script>
+  const pane = document.getElementById('pane');
+  const tabs = { ide: document.getElementById('tab-ide'), files: document.getElementById('tab-files') };
+
+  function setTab(name) {
+    Object.values(tabs).forEach(a => a.classList.remove('active'));
+    if (name === 'files') {
+      pane.src = '/files/';
+      tabs.files.classList.add('active');
+    } else {
+      pane.src = '/ide/';
+      tabs.ide.classList.add('active');
+    }
+  }
+
+  function init() {
+    const hash = (location.hash || '#ide').replace('#','');
+    setTab(hash === 'files' ? 'files' : 'ide');
+  }
+  window.addEventListener('hashchange', init);
+  init();
+</script>

@@ -12,7 +12,16 @@
   }
 
   handle_path /files* {
-    reverse_proxy https://drive.unitn.clarelab.moe
+    reverse_proxy https://drive.unitn.clarelab.moe {
+      header_up Host {http.reverse_proxy.upstream.hostport}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+
+      header_down -X-Frame-Options
+      header_down -Frame-Options
+      header_down -Content-Security-Policy
+    }
   }
 
   respond /healthz 200
