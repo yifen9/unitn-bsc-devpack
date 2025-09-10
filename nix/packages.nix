@@ -5,4 +5,5 @@ with pkgs; [
   gcc
   openjdk
   polyml
-]
+  conda-shell
+]1
